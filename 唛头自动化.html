@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>唛头工具</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS CDN -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+    <!-- html2pdf.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        .glass {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        body {
+            background-image: url('https://images.pexels.com/photos/21760959/pexels-photo-21760959.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2');
+            background-size: cover;
+            background-position: center;
+        }
+        input.error, select.error {
+            border-color: #ff4444;
+        }
+        input:focus, select:focus {
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+        }
+        select {
+            background-color: #1f2937;
+            color: #ffffff;
+        }
+        select option {
+            background-color: #374151;
+            color: #ffffff;
+        }
+        .readonly {
+            background-color: #4b5563;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center min-h-screen bg-gray-900 text-white p-4">
+    <!-- 订单明细 -->
+    <div class="w-[900px] h-[300px] glass rounded-xl shadow-lg p-4 flex flex-col mb-6">
+        <div class="bg-gray-800 text-center py-2 rounded-t-lg">
+            <h2 class="text-lg font-semibold">订单明细</h2>
+        </div>
+        <div class="flex-1 overflow-y-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-gray-700">
+                        <th class="py-2">托盘编号</th>
+                        <th>胶型</th>
+                        <th>货描</th>
+                        <th>长</th>
+                        <th>宽</th>
+                        <th>厚度</th>
+                        <th>张/盒</th>
+                        <th>盒数</th>
+                        <th>总数</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="dataGrid" class="text-center">
+                    <tr>
+                        <td><input type="number" class="pallet-no bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="1" step="1" oninput="saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><select class="glue-type bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28" onchange="enableCustomInput(this); saveData()" onkeydown="handleKeyDown(event, this)">
+                            <option value="">胶型选择</option>
+                            <option value="CTP-200-SG">CTP-200-SG</option>
+                            <option value="CTP-200-S">CTP-200-S</option>
+                            <option value="CTCP-300-3">CTCP-300-3</option>
+                            <option value="CTCP-300-S">CTCP-300-S</option>
+                            <option value="custom">自定义</option>
+                        </select></td>
+                        <td><select class="description bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28" onchange="enableCustomInput(this); saveData()" onkeydown="handleKeyDown(event, this)">
+                            <option value="">货描选择</option>
+                            <option value="CTP PLATE">CTP PLATE</option>
+                            <option value="CTP DL">CTP DL</option>
+                            <option value="CTCP PLATE">CTCP PLATE</option>
+                            <option value="CTCP SL">CTCP SL</option>
+                            <option value="CTCP DL">CTCP DL</option>
+                            <option value="custom">自定义</option>
+                        </select></td>
+                        <td><input type="number" class="length bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" placeholder="790" oninput="saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="width bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" placeholder="1030" oninput="saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="thickness bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" placeholder="0.3" step="0.01" oninput="updateSheetsPerBox(this); saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="sheets-per-box bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" placeholder="50" oninput="calculateQuantity(this); saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="box-count bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" placeholder="50" oninput="calculateQuantity(this); saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="quantity bg-transparent border border-gray-500 rounded px-1 py-0.5 w-20 readonly" value="0" readonly></td>
+                        <td><button class="bg-green-600 hover:bg-green-700 rounded px-2 py-1" onclick="generateLabel(this)"><img src="https://unpkg.com/lucide-static@latest/icons/play.svg" class="w-4 h-4 inline"/></button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="flex justify-between mt-2">
+            <button class="bg-blue-600 hover:bg-blue-700 rounded px-3 py-1 flex items-center" onclick="addDataRow()">
+                <img src="https://unpkg.com/lucide-static@latest/icons/plus.svg" class="w-4 h-4 mr-1"/> 添加行
+            </button>
+            <button class="bg-blue-600 hover:bg-blue-700 rounded px-3 py-1 flex items-center" onclick="printAllLabels()">
+                <img src="https://unpkg.com/lucide-static@latest/icons/printer.svg" class="w-4 h-4 mr-1"/> 打印所有唛头
+            </button>
+            <button class="bg-red-600 hover:bg-red-700 rounded px-3 py-1 flex items-center" onclick="clearAllData()">
+                <img src="https://unpkg.com/lucide-static@latest/icons/trash-2.svg" class="w-4 h-4 mr-1"/> 清空数据
+            </button>
+        </div>
+    </div>
+
+    <div class="flex space-x-6 w-[900px]">
+        <!-- 打托要求 -->
+        <div class="w-[550px] h-[300px] glass rounded-xl shadow-lg p-4 flex flex-col">
+            <div class="bg-gray-800 text-center py-2 rounded-t-lg">
+                <h2 class="text-lg font-semibold">打托要求</h2>
+            </div>
+            <div class="flex-1 overflow-y-auto">
+                <div class="flow-number flex items-center space-x-2 mb-2 flex-wrap">
+                    <label>流程单号:</label>
+                    <input type="text" id="flowNumber" class="bg-transparent border border-gray-500 rounded px-1 py-0.5 focus:border-blue-400" oninput="saveFlowNumber()">
+                    <label>发货时间:</label>
+                    <input type="date" id="shippingDate" class="bg-transparent border border-gray-500 rounded px-1 py-0.5 focus:border-blue-400" oninput="saveFlowNumber()">
+                    <label>商务:</label>
+                    <select id="businessContact" class="bg-transparent border border-gray-500 rounded px-1 py-0.5 focus:border-blue-400" onchange="saveFlowNumber()">
+                        <option value="">请选择</option>
+                        <option value="李晨晨">李晨晨</option>
+                        <option value="陈慧">陈慧</option>
+                        <option value="吴聪">吴聪</option>
+                        <option value="彭玉姣">彭玉姣</option>
+                        <option value="王静">王静</option>
+                    </select>
+                </div>
+                <div class="h-2"></div>
+                <table class="w-full text-xs" id="palletTable">
+                    <thead>
+                        <tr class="bg-gray-700">
+                            <th class="py-2">托盘编号</th>
+                            <th>胶型</th>
+                            <th>货描</th>
+                            <th>规格</th>
+                            <th>张/盒</th>
+                            <th>盒数</th>
+                            <th>总数</th>
+                            <th>托盘规格</th>
+                            <th>打托</th>
+                            <th>备注</th>
+                        </tr>
+                    </thead>
+                    <tbody id="palletRequirements" class="text-center">
+                        <tr>
+                            <td colspan="10" class="py-2">点击“生成”以查看打托要求。</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div id="totals" class="text-sm mt-2">总数: 0 张, 总平米: 0 m²</div>
+            </div>
+            <div class="flex justify-between mt-2">
+                <button class="bg-blue-600 hover:bg-blue-700 rounded px-3 py-1 flex items-center" onclick="downloadPalletRequirements()">
+                    <img src="https://unpkg.com/lucide-static@latest/icons/download.svg" class="w-4 h-4 mr-1"/> Excel下载
+                </button>
+                <button class="bg-blue-600 hover:bg-blue-700 rounded px-3 py-1 flex items-center" onclick="printPalletRequirements()">
+                    <img src="https://unpkg.com/lucide-static@latest/icons/printer.svg" class="w-4 h-4 mr-1"/> 一键打印
+                </button>
+            </div>
+        </div>
+
+        <!-- 唛头预览 -->
+        <div class="w-[550px] h-[300px] glass rounded-xl shadow-lg p-4 flex flex-col">
+            <div class="bg-gray-800 text-center py-2 rounded-t-lg">
+                <h2 class="text-lg font-semibold">唛头预览</h2>
+            </div>
+            <div id="labelPreview" class="flex-1 overflow-y-auto text-sm">
+                <div id="labelContent" class="p-2 bg-white text-black rounded">
+                    <h3 class="text-center text-xl font-bold">PALLET NO.: 未生成</h3>
+                    <table class="w-full border border-black mt-2 text-xs">
+                        <tr><td class="border border-black p-1">Invoice NO.[PO NO.]</td><td class="p-1">xAI Printing Co., Ltd.</td></tr>
+                        <tr><td class="border border-black p-1">Destination</td><td class="p-1">[Destination Port]</td></tr>
+                        <tr><td class="border border-black p-1">Total Quantity</td><td class="p-1">等待数据</td></tr>
+                    </table>
+                    <div class="text-center mt-2 font-bold">MADE IN CHINA</div>
+                    <div class="mt-1">Remark:</div>
+                </div>
+            </div>
+            <div class="flex justify-between mt-2">
+                <button class="bg-blue-600 hover:bg-blue-700 rounded px-3 py-1 flex items-center" onclick="downloadLabelAsPDF()">
+                    <img src="https://unpkg.com/lucide-static@latest/icons/download.svg" class="w-4 h-4 mr-1"/> 下载PDF
+                </button>
+                <button class="bg-blue-600 hover:bg-blue-700 rounded px-3 py-1 flex items-center" onclick="printCurrentLabel()">
+                    <img src="https://unpkg.com/lucide-static@latest/icons/printer.svg" class="w-4 h-4 mr-1"/> 一键打印
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const palletData = [
+            { pallet: [1735, 1410], plate: [[1650, 1330]] },
+            { pallet: [1550, 1250], plate: [[1465, 1155], [1435, 1150]] },
+            { pallet: [1410, 1150], plate: [[1325, 1065], [1170, 1045]] },
+            { pallet: [1240, 1020], plate: [[1155, 935]] },
+            { pallet: [1220, 990], plate: [[1135, 905]] },
+            { pallet: [1140, 880], plate: [[1065, 805]] },
+            { pallet: [1140, 910], plate: [[1065, 835]] },
+            { pallet: [1110, 900], plate: [[1035, 825]] },
+            { pallet: [1110, 880], plate: [[1035, 805], [1035, 795]] },
+            { pallet: [1110, 850], plate: [[1035, 775], [980, 760]] },
+            { pallet: [1040, 800], plate: [[965, 725], [920, 720]] },
+            { pallet: [1000, 840], plate: [[925, 765]] },
+            { pallet: [990, 745], plate: [[915, 670]] },
+            { pallet: [910, 725], plate: [[835, 650], [805, 665]] },
+            { pallet: [890, 665], plate: [[785, 640]] },
+            { pallet: [870, 630], plate: [[765, 610], [750, 610], [735, 605], [515, 420], [515, 405], [475, 400]] },
+            { pallet: [870, 705], plate: [[760, 682]] },
+            { pallet: [835, 645], plate: [[729, 620]] },
+            { pallet: [790, 670], plate: [[685, 645]] },
+            { pallet: [780, 590], plate: [[675, 565], [655, 555], [455, 375]] },
+            { pallet: [920, 660], plate: [[555, 438]] },
+            { pallet: [970, 635], plate: [[530, 464]] }
+        ];
+
+        let palletRequirementsData = [];
+        let suffixNum = 1;
+
+        window.onload = function() {
+            loadData();
+            loadFlowNumber();
+            updateSuffixNum();
+            renderPalletRequirements();
+            updateTotals();
+        };
+
+        function generateLabel(button) {
+            const row = button.closest('tr');
+            const rawPalletNo = parseInt(row.querySelector('.pallet-no').value);
+            updateSuffixNum();
+            const palletNo = `${rawPalletNo}/${suffixNum}`;
+            const glueType = row.querySelector('.glue-type').value === 'custom' ? row.querySelector('.glue-type-custom')?.value : row.querySelector('.glue-type').value;
+            const description = row.querySelector('.description').value === 'custom' ? row.querySelector('.description-custom')?.value : row.querySelector('.description').value;
+            const length = parseFloat(row.querySelector('.length').value);
+            const width = parseFloat(row.querySelector('.width').value);
+            const thickness = parseFloat(row.querySelector('.thickness').value);
+            const sheetsPerBox = parseInt(row.querySelector('.sheets-per-box').value);
+            const boxCount = parseInt(row.querySelector('.box-count').value);
+            const quantity = sheetsPerBox * boxCount;
+
+            if (!rawPalletNo || !glueType || !description || !length || !width || !thickness || !sheetsPerBox || !boxCount) {
+                alert('请填写所有字段！');
+                highlightErrors(row);
+                return;
+            }
+
+            const palletSize = calculatePalletSize(width, length);
+            if (!palletSize) {
+                alert('未找到匹配的托盘规格，请检查版材尺寸！');
+                return;
+            }
+
+            palletRequirementsData.push({
+                palletNo,
+                glueType,
+                description,
+                specs: `${width} x ${length} x ${thickness} mm`,
+                sheetsPerBox,
+                boxCount,
+                totalSheets: quantity,
+                palletSize: `${palletSize[0]} x ${palletSize[1]} mm`,
+                toPallet: false,
+                remarks: ''
+            });
+            renderPalletRequirements();
+            saveRequirementsData();
+            updateTotals();
+
+            const samePalletItems = palletRequirementsData.filter(item => item.palletNo === palletNo);
+            let specsContent = '';
+            let totalQuantity = 0;
+            let totalBoxes = 0;
+            let maxPalletSize = palletSize;
+            samePalletItems.forEach(item => {
+                specsContent += `
+                    <tr><td class="border border-black p-1">Products Type</td><td class="p-1">${item.glueType}</td></tr>
+                    <tr><td class="border border-black p-1">Description</td><td class="p-1">${item.description}</td></tr>
+                    <tr><td class="border border-black p-1">Size</td><td class="p-1">${item.specs}</td></tr>
+                    <tr><td class="border border-black p-1">Quantity</td><td class="p-1">${item.totalSheets} Sheets (${item.boxCount} Boxes)</td></tr>`;
+                totalQuantity += item.totalSheets;
+                totalBoxes += item.boxCount;
+                const currentPalletArea = parseInt(item.palletSize.split(' x ')[0]) * parseInt(item.palletSize.split(' x ')[1]);
+                const maxPalletArea = maxPalletSize[0] * maxPalletSize[1];
+                if (currentPalletArea > maxPalletArea) {
+                    maxPalletSize = [parseInt(item.palletSize.split(' x ')[0]), parseInt(item.palletSize.split(' x ')[1])];
+                }
+            });
+
+            const labelContent = `
+                <h3 class="text-center text-xl font-bold">PALLET NO.: ${palletNo}</h3>
+                <table class="w-full border border-black mt-2">
+                    <tr><td class="border border-black p-1">Invoice NO.[PO NO.]</td><td class="p-1">xAI Printing Co., Ltd., 123 Tech Road, Shanghai</td></tr>
+                    <tr><td class="border border-black p-1">Destination</td><td class="p-1">[Destination Port], [Destination Country]</td></tr>
+                    ${specsContent}
+                    <tr><td class="border border-black p-1">Total Quantity</td><td class="p-1">${totalQuantity} Sheets (${totalBoxes} Boxes)</td></tr>
+                    <tr><td class="border border-black p-1">Pallet Size</td><td class="p-1">${maxPalletSize[0]} x ${maxPalletSize[1]} mm</td></tr>
+                </table>
+                <div class="text-center mt-2 font-bold">MADE IN CHINA</div>
+                <div class="mt-1">Remark:</div>
+            `;
+            document.getElementById('labelContent').innerHTML = labelContent;
+            document.getElementById('labelPreview').style.display = 'block';
+        }
+
+        function addDataRow() {
+            updateSuffixNum();
+            const tbody = document.getElementById('dataGrid');
+            const lastRow = tbody.rows[tbody.rows.length - 1];
+            const lastPalletNo = lastRow ? parseInt(lastRow.querySelector('.pallet-no').value) + 1 : 1;
+            const lastGlueType = lastRow ? (lastRow.querySelector('.glue-type').value === 'custom' ? lastRow.querySelector('.glue-type-custom')?.value : lastRow.querySelector('.glue-type').value) : '';
+            const lastDescription = lastRow ? (lastRow.querySelector('.description').value === 'custom' ? lastRow.querySelector('.description-custom')?.value : lastRow.querySelector('.description').value) : '';
+            const lastLength = lastRow ? lastRow.querySelector('.length').value : '';
+            const lastWidth = lastRow ? lastRow.querySelector('.width').value : '';
+            const lastThickness = lastRow ? lastRow.querySelector('.thickness').value : '';
+            const lastSheetsPerBox = lastRow ? lastRow.querySelector('.sheets-per-box').value : '';
+            const lastBoxCount = lastRow ? lastRow.querySelector('.box-count').value : '';
+
+            const newRow = tbody.insertRow();
+            newRow.innerHTML = `
+                <td><input type="number" class="pallet-no bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${lastPalletNo}" step="1" oninput="saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                <td><select class="glue-type bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28" onchange="enableCustomInput(this); saveData()" onkeydown="handleKeyDown(event, this)">
+                    <option value="">选择胶型</option>
+                    <option value="CTP-200-SG" ${lastGlueType === 'CTP-200-SG' ? 'selected' : ''}>CTP-200-SG</option>
+                    <option value="CTP-200-S" ${lastGlueType === 'CTP-200-S' ? 'selected' : ''}>CTP-200-S</option>
+                    <option value="CTCP-300-3" ${lastGlueType === 'CTCP-300-3' ? 'selected' : ''}>CTCP-300-3</option>
+                    <option value="CTCP-300-S" ${lastGlueType === 'CTCP-300-S' ? 'selected' : ''}>CTCP-300-S</option>
+                    <option value="custom" ${lastGlueType && !['CTP-200-SG', 'CTP-200-S', 'CTCP-300-3', 'CTCP-300-S'].includes(lastGlueType) ? 'selected' : ''}>自定义</option>
+                </select>${lastGlueType && !['CTP-200-SG', 'CTP-200-S', 'CTCP-300-3', 'CTCP-300-S'].includes(lastGlueType) ? `<input type="text" class="glue-type-custom bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28 mt-1" value="${lastGlueType}" oninput="saveData()" onkeydown="handleKeyDown(event, this)">` : ''}</td>
+                <td><select class="description bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28" onchange="enableCustomInput(this); saveData()" onkeydown="handleKeyDown(event, this)">
+                    <option value="">选择货描</option>
+                    <option value="CTP PLATE" ${lastDescription === 'CTP PLATE' ? 'selected' : ''}>CTP PLATE</option>
+                    <option value="CTP DL" ${lastDescription === 'CTP DL' ? 'selected' : ''}>CTP DL</option>
+                    <option value="CTCP PLATE" ${lastDescription === 'CTCP PLATE' ? 'selected' : ''}>CTCP PLATE</option>
+                    <option value="CTCP SL" ${lastDescription === 'CTCP SL' ? 'selected' : ''}>CTCP SL</option>
+                    <option value="CTCP DL" ${lastDescription === 'CTCP DL' ? 'selected' : ''}>CTCP DL</option>
+                    <option value="custom" ${lastDescription && !['CTP PLATE', 'CTP DL', 'CTCP PLATE', 'CTCP SL', 'CTCP DL'].includes(lastDescription) ? 'selected' : ''}>自定义</option>
+                </select>${lastDescription && !['CTP PLATE', 'CTP DL', 'CTCP PLATE', 'CTCP SL', 'CTCP DL'].includes(lastDescription) ? `<input type="text" class="description-custom bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28 mt-1" value="${lastDescription}" oninput="saveData()" onkeydown="handleKeyDown(event, this)">` : ''}</td>
+                <td><input type="number" class="length bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${lastLength}" oninput="saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                <td><input type="number" class="width bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${lastWidth}" oninput="saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                <td><input type="number" class="thickness bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${lastThickness}" step="0.01" oninput="updateSheetsPerBox(this); saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                <td><input type="number" class="sheets-per-box bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${lastSheetsPerBox}" oninput="calculateQuantity(this); saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                <td><input type="number" class="box-count bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${lastBoxCount}" oninput="calculateQuantity(this); saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                <td><input type="number" class="quantity bg-transparent border border-gray-500 rounded px-1 py-0.5 w-20 readonly" value="${lastSheetsPerBox && lastBoxCount ? lastSheetsPerBox * lastBoxCount : 0}" readonly></td>
+                <td><button class="bg-green-600 hover:bg-green-700 rounded px-2 py-1" onclick="generateLabel(this)"><img src="https://unpkg.com/lucide-static@latest/icons/play.svg" class="w-4 h-4 inline"/></button></td>
+            `;
+            newRow.querySelector('.pallet-no').focus();
+            saveData();
+        }
+
+        function enableCustomInput(select) {
+            const row = select.closest('tr');
+            const className = select.className.split(' ')[0];
+            const customInput = row.querySelector(`.${className}-custom`);
+            if (select.value === 'custom' && !customInput) {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = `${className}-custom bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28 mt-1`;
+                input.oninput = () => saveData();
+                input.onkeydown = (e) => handleKeyDown(e, input);
+                select.insertAdjacentElement('afterend', input);
+                input.focus();
+            } else if (select.value !== 'custom' && customInput) {
+                customInput.remove();
+            }
+        }
+
+        function updateSheetsPerBox(input) {
+            const row = input.closest('tr');
+            const thickness = parseFloat(input.value);
+            const sheetsPerBoxInput = row.querySelector('.sheets-per-box');
+            if (thickness === 0.3) {
+                sheetsPerBoxInput.value = 50;
+            } else if (thickness === 0.15) {
+                sheetsPerBoxInput.value = 100;
+            }
+            calculateQuantity(input);
+            saveData();
+        }
+
+        function calculateQuantity(input) {
+            const row = input.closest('tr');
+            const sheetsPerBox = parseInt(row.querySelector('.sheets-per-box').value) || 0;
+            const boxCount = parseInt(row.querySelector('.box-count').value) || 0;
+            row.querySelector('.quantity').value = sheetsPerBox * boxCount;
+        }
+
+        function handleKeyDown(event, input) {
+            const row = input.closest('tr');
+            const inputs = Array.from(row.querySelectorAll('input, select'));
+            const currentIndex = inputs.indexOf(input);
+
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                if (currentIndex === inputs.length - 2) { // 跳过 readonly 的数量列
+                    addDataRow();
+                } else if (event.ctrlKey) {
+                    generateLabel(row.querySelector('button'));
+                } else {
+                    inputs[currentIndex + 1].focus();
+                }
+            } else if (event.key === 'Tab' && currentIndex === inputs.length - 2) {
+                event.preventDefault();
+                addDataRow();
+                const newRow = document.getElementById('dataGrid').rows[row.rowIndex + 1];
+                newRow.querySelector('.pallet-no').focus();
+            }
+        }
+
+        function handlePaste(event) {
+            event.preventDefault();
+            const clipboardData = event.clipboardData.getData('text');
+            const rows = clipboardData.trim().split('\n');
+            const tbody = document.getElementById('dataGrid');
+            tbody.innerHTML = '';
+
+            rows.forEach((rowData, index) => {
+                const cols = rowData.split('\t');
+                if (cols.length >= 8) {
+                    const newRow = tbody.insertRow();
+                    newRow.innerHTML = `
+                        <td><input type="number" class="pallet-no bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${parseInt(cols[0]) || (index + 1)}" step="1" oninput="saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><select class="glue-type bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28" onchange="enableCustomInput(this); saveData()" onkeydown="handleKeyDown(event, this)">
+                            <option value="">选择胶型</option>
+                            <option value="CTP-200-SG" ${cols[1] === 'CTP-200-SG' ? 'selected' : ''}>CTP-200-SG</option>
+                            <option value="CTP-200-S" ${cols[1] === 'CTP-200-S' ? 'selected' : ''}>CTP-200-S</option>
+                            <option value="CTCP-300-3" ${cols[1] === 'CTCP-300-3' ? 'selected' : ''}>CTCP-300-3</option>
+                            <option value="CTCP-300-S" ${cols[1] === 'CTCP-300-S' ? 'selected' : ''}>CTCP-300-S</option>
+                            <option value="custom" ${cols[1] && !['CTP-200-SG', 'CTP-200-S', 'CTCP-300-3', 'CTCP-300-S'].includes(cols[1]) ? 'selected' : ''}>自定义</option>
+                        </select>${cols[1] && !['CTP-200-SG', 'CTP-200-S', 'CTCP-300-3', 'CTCP-300-S'].includes(cols[1]) ? `<input type="text" class="glue-type-custom bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28 mt-1" value="${cols[1]}" oninput="saveData()" onkeydown="handleKeyDown(event, this)">` : ''}</td>
+                        <td><select class="description bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28" onchange="enableCustomInput(this); saveData()" onkeydown="handleKeyDown(event, this)">
+                            <option value="">选择货描</option>
+                            <option value="CTP PLATE" ${cols[2] === 'CTP PLATE' ? 'selected' : ''}>CTP PLATE</option>
+                            <option value="CTP DL" ${cols[2] === 'CTP DL' ? 'selected' : ''}>CTP DL</option>
+                            <option value="CTCP PLATE" ${cols[2] === 'CTCP PLATE' ? 'selected' : ''}>CTCP PLATE</option>
+                            <option value="CTCP SL" ${cols[2] === 'CTCP SL' ? 'selected' : ''}>CTCP SL</option>
+                            <option value="CTCP DL" ${cols[2] === 'CTCP DL' ? 'selected' : ''}>CTCP DL</option>
+                            <option value="custom" ${cols[2] && !['CTP PLATE', 'CTP DL', 'CTCP PLATE', 'CTCP SL', 'CTCP DL'].includes(cols[2]) ? 'selected' : ''}>自定义</option>
+                        </select>${cols[2] && !['CTP PLATE', 'CTP DL', 'CTCP PLATE', 'CTCP SL', 'CTCP DL'].includes(cols[2]) ? `<input type="text" class="description-custom bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28 mt-1" value="${cols[2]}" oninput="saveData()" onkeydown="handleKeyDown(event, this)">` : ''}</td>
+                        <td><input type="number" class="length bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${cols[3]}" oninput="saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="width bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${cols[4]}" oninput="saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="thickness bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${cols[5]}" step="0.01" oninput="updateSheetsPerBox(this); saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="sheets-per-box bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${cols[6]}" oninput="calculateQuantity(this); saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="box-count bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${cols[7]}" oninput="calculateQuantity(this); saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="quantity bg-transparent border border-gray-500 rounded px-1 py-0.5 w-20 readonly" value="${(parseInt(cols[6]) || 0) * (parseInt(cols[7]) || 0)}" readonly></td>
+                        <td><button class="bg-green-600 hover:bg-green-700 rounded px-2 py-1" onclick="generateLabel(this)"><img src="https://unpkg.com/lucide-static@latest/icons/play.svg" class="w-4 h-4 inline"/></button></td>
+                    `;
+                }
+            });
+            saveData();
+            updateSuffixNum();
+        }
+
+        function highlightErrors(row) {
+            const inputs = row.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                if (!input.value && !input.classList.contains('quantity')) {
+                    input.classList.add('error');
+                } else {
+                    input.classList.remove('error');
+                }
+            });
+        }
+
+        function updateSuffixNum() {
+            const palletNos = Array.from(document.querySelectorAll('.pallet-no')).map(input => parseInt(input.value));
+            suffixNum = palletNos.length > 0 ? Math.max(...palletNos) : 1;
+        }
+
+        function renderPalletRequirements() {
+            const tbody = document.getElementById('palletRequirements');
+            tbody.innerHTML = '';
+            if (palletRequirementsData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="py-2">点击“生成”以查看打托要求。</td></tr>';
+                return;
+            }
+
+            const groupedData = {};
+            palletRequirementsData.forEach(item => {
+                if (!groupedData[item.palletNo]) {
+                    groupedData[item.palletNo] = [];
+                }
+                groupedData[item.palletNo].push(item);
+            });
+
+            Object.keys(groupedData).forEach(palletNo => {
+                const items = groupedData[palletNo];
+                let maxPalletSize = [0, 0];
+                items.forEach(item => {
+                    const palletArea = parseInt(item.palletSize.split(' x ')[0]) * parseInt(item.palletSize.split(' x ')[1]);
+                    const maxArea = maxPalletSize[0] * maxPalletSize[1];
+                    if (palletArea > maxArea) {
+                        maxPalletSize = [parseInt(item.palletSize.split(' x ')[0]), parseInt(item.palletSize.split(' x ')[1])];
+                    }
+                });
+
+                items.forEach((item, index) => {
+                    const row = document.createElement('tr');
+                    if (index === 0) {
+                        row.innerHTML = `
+                            <td rowspan="${items.length}">${item.palletNo}</td>
+                            <td>${item.glueType}</td>
+                            <td>${item.description}</td>
+                            <td>${item.specs}</td>
+                            <td>${item.sheetsPerBox}</td>
+                            <td>${item.boxCount}</td>
+                            <td>${item.totalSheets}</td>
+                            <td rowspan="${items.length}">${maxPalletSize[0]} x ${maxPalletSize[1]} mm</td>
+                            <td class="checkbox-cell"><input type="checkbox" onchange="updatePalletStatus('${palletNo}', ${index}, this.checked); saveRequirementsData()"></td>
+                            <td>${item.remarks}</td>
+                        `;
+                    } else {
+                        row.innerHTML = `
+                            <td>${item.glueType}</td>
+                            <td>${item.description}</td>
+                            <td>${item.specs}</td>
+                            <td>${item.sheetsPerBox}</td>
+                            <td>${item.boxCount}</td>
+                            <td>${item.totalSheets}</td>
+                            <td class="checkbox-cell"><input type="checkbox" onchange="updatePalletStatus('${palletNo}', ${index}, this.checked); saveRequirementsData()"></td>
+                            <td>${item.remarks}</td>
+                        `;
+                    }
+                    row.querySelector('input[type="checkbox"]').checked = item.toPallet;
+                    tbody.appendChild(row);
+                });
+            });
+        }
+
+        function updatePalletStatus(palletNo, index, checked) {
+            const itemIndex = palletRequirementsData.findIndex(item => item.palletNo === palletNo && item.specs === palletRequirementsData.filter(i => i.palletNo === palletNo)[index].specs);
+            palletRequirementsData[itemIndex].toPallet = checked;
+        }
+
+        function calculatePalletSize(width, length) {
+            const candidates = [];
+            for (const entry of palletData) {
+                for (const plate of entry.plate) {
+                    if (width <= plate[0] && length <= plate[1]) {
+                        candidates.push({ pallet: entry.pallet, plate: plate });
+                    }
+                }
+            }
+            if (candidates.length === 0) return null;
+            candidates.sort((a, b) => (a.plate[0] * a.plate[1]) - (b.plate[0] * b.plate[1]));
+            return candidates[0].pallet;
+        }
+
+        function saveData() {
+            const rows = Array.from(document.querySelectorAll('#dataGrid tr'));
+            const data = rows.map(row => ({
+                palletNo: row.querySelector('.pallet-no').value,
+                glueType: row.querySelector('.glue-type').value === 'custom' ? row.querySelector('.glue-type-custom')?.value : row.querySelector('.glue-type').value,
+                description: row.querySelector('.description').value === 'custom' ? row.querySelector('.description-custom')?.value : row.querySelector('.description').value,
+                length: row.querySelector('.length').value,
+                width: row.querySelector('.width').value,
+                thickness: row.querySelector('.thickness').value,
+                sheetsPerBox: row.querySelector('.sheets-per-box').value,
+                boxCount: row.querySelector('.box-count').value,
+                quantity: row.querySelector('.quantity').value
+            }));
+            localStorage.setItem('inputData', JSON.stringify(data));
+            updateSuffixNum();
+        }
+
+        function loadData() {
+            const savedData = localStorage.getItem('inputData');
+            if (savedData) {
+                const data = JSON.parse(savedData);
+                const tbody = document.getElementById('dataGrid');
+                tbody.innerHTML = '';
+                data.forEach(item => {
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td><input type="number" class="pallet-no bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${parseInt(item.palletNo)}" step="1" oninput="saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><select class="glue-type bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28" onchange="enableCustomInput(this); saveData()" onkeydown="handleKeyDown(event, this)">
+                            <option value="">选择胶型</option>
+                            <option value="CTP-200-SG" ${item.glueType === 'CTP-200-SG' ? 'selected' : ''}>CTP-200-SG</option>
+                            <option value="CTP-200-S" ${item.glueType === 'CTP-200-S' ? 'selected' : ''}>CTP-200-S</option>
+                            <option value="CTCP-300-3" ${item.glueType === 'CTCP-300-3' ? 'selected' : ''}>CTCP-300-3</option>
+                            <option value="CTCP-300-S" ${item.glueType === 'CTCP-300-S' ? 'selected' : ''}>CTCP-300-S</option>
+                            <option value="custom" ${item.glueType && !['CTP-200-SG', 'CTP-200-S', 'CTCP-300-3', 'CTCP-300-S'].includes(item.glueType) ? 'selected' : ''}>自定义</option>
+                        </select>${item.glueType && !['CTP-200-SG', 'CTP-200-S', 'CTCP-300-3', 'CTCP-300-S'].includes(item.glueType) ? `<input type="text" class="glue-type-custom bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28 mt-1" value="${item.glueType}" oninput="saveData()" onkeydown="handleKeyDown(event, this)">` : ''}</td>
+                        <td><select class="description bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28" onchange="enableCustomInput(this); saveData()" onkeydown="handleKeyDown(event, this)">
+                            <option value="">选择货描</option>
+                            <option value="CTP PLATE" ${item.description === 'CTP PLATE' ? 'selected' : ''}>CTP PLATE</option>
+                            <option value="CTP DL" ${item.description === 'CTP DL' ? 'selected' : ''}>CTP DL</option>
+                            <option value="CTCP PLATE" ${item.description === 'CTCP PLATE' ? 'selected' : ''}>CTCP PLATE</option>
+                            <option value="CTCP SL" ${item.description === 'CTCP SL' ? 'selected' : ''}>CTCP SL</option>
+                            <option value="CTCP DL" ${item.description === 'CTCP DL' ? 'selected' : ''}>CTCP DL</option>
+                            <option value="custom" ${item.description && !['CTP PLATE', 'CTP DL', 'CTCP PLATE', 'CTCP SL', 'CTCP DL'].includes(item.description) ? 'selected' : ''}>自定义</option>
+                        </select>${item.description && !['CTP PLATE', 'CTP DL', 'CTCP PLATE', 'CTCP SL', 'CTCP DL'].includes(item.description) ? `<input type="text" class="description-custom bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28 mt-1" value="${item.description}" oninput="saveData()" onkeydown="handleKeyDown(event, this)">` : ''}</td>
+                        <td><input type="number" class="length bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${item.length}" oninput="saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="width bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${item.width}" oninput="saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="thickness bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${item.thickness}" step="0.01" oninput="updateSheetsPerBox(this); saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="sheets-per-box bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${item.sheetsPerBox}" oninput="calculateQuantity(this); saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="box-count bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="${item.boxCount}" oninput="calculateQuantity(this); saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="quantity bg-transparent border border-gray-500 rounded px-1 py-0.5 w-20 readonly" value="${item.quantity}" readonly></td>
+                        <td><button class="bg-green-600 hover:bg-green-700 rounded px-2 py-1" onclick="generateLabel(this)"><img src="https://unpkg.com/lucide-static@latest/icons/play.svg" class="w-4 h-4 inline"/></button></td>
+                    `;
+                });
+            }
+            updateSuffixNum();
+        }
+
+        function saveRequirementsData() {
+            localStorage.setItem('palletRequirementsData', JSON.stringify(palletRequirementsData));
+        }
+
+        function loadRequirementsData() {
+            const savedData = localStorage.getItem('palletRequirementsData');
+            if (savedData) {
+                palletRequirementsData = JSON.parse(savedData);
+            }
+        }
+
+        function saveFlowNumber() {
+            const flowNumber = document.getElementById('flowNumber').value;
+            const businessContact = document.getElementById('businessContact').value;
+            const shippingDate = document.getElementById('shippingDate').value;
+            localStorage.setItem('flowNumber', JSON.stringify({ flowNumber, businessContact, shippingDate }));
+        }
+
+        function loadFlowNumber() {
+            const savedFlowNumber = localStorage.getItem('flowNumber');
+            if (savedFlowNumber) {
+                const { flowNumber, businessContact, shippingDate } = JSON.parse(savedFlowNumber);
+                document.getElementById('flowNumber').value = flowNumber || '';
+                document.getElementById('businessContact').value = businessContact || '';
+                document.getElementById('shippingDate').value = shippingDate || '';
+            }
+        }
+
+        function updateTotals() {
+            const totalSheets = palletRequirementsData.reduce((sum, item) => sum + item.totalSheets, 0);
+            const totalArea = palletRequirementsData.reduce((sum, item) => {
+                const [width, length] = item.specs.split(' x ').map(parseFloat);
+                return sum + (width * length * item.totalSheets / 1000000);
+            }, 0);
+            document.getElementById('totals').innerHTML = `总张数: ${totalSheets} 张, 总平米: ${totalArea.toFixed(2)} m²`;
+        }
+
+        function clearAllData() {
+            if (confirm('确定要清空所有输入数据吗？这将删除所有手动输入的数据，但保留已生成的打托要求！')) {
+                localStorage.removeItem('inputData');
+                localStorage.removeItem('flowNumber');
+                const tbody = document.getElementById('dataGrid');
+                tbody.innerHTML = `
+                    <tr>
+                        <td><input type="number" class="pallet-no bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" value="1" step="1" oninput="saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><select class="glue-type bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28" onchange="enableCustomInput(this); saveData()" onkeydown="handleKeyDown(event, this)">
+                            <option value="">选择胶型</option>
+                            <option value="CTP-200-SG">CTP-200-SG</option>
+                            <option value="CTP-200-S">CTP-200-S</option>
+                            <option value="CTCP-300-3">CTCP-300-3</option>
+                            <option value="CTCP-300-S">CTCP-300-S</option>
+                            <option value="custom">自定义</option>
+                        </select></td>
+                        <td><select class="description bg-transparent border border-gray-500 rounded px-1 py-0.5 w-28" onchange="enableCustomInput(this); saveData()" onkeydown="handleKeyDown(event, this)">
+                            <option value="">选择货描</option>
+                            <option value="CTP PLATE">CTP PLATE</option>
+                            <option value="CTP DL">CTP DL</option>
+                            <option value="CTCP PLATE">CTCP PLATE</option>
+                            <option value="CTCP SL">CTCP SL</option>
+                            <option value="CTCP DL">CTCP DL</option>
+                            <option value="custom">自定义</option>
+                        </select></td>
+                        <td><input type="number" class="length bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" placeholder="790" oninput="saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="width bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" placeholder="1030" oninput="saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="thickness bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" placeholder="0.3" step="0.01" oninput="updateSheetsPerBox(this); saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="sheets-per-box bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16"
+
+ placeholder="50" oninput="calculateQuantity(this); saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="box-count bg-transparent border border-gray-500 rounded px-1 py-0.5 w-16" placeholder="50" oninput="calculateQuantity(this); saveData()" onkeydown="handleKeyDown(event, this)"></td>
+                        <td><input type="number" class="quantity bg-transparent border border-gray-500 rounded px-1 py-0.5 w-20 readonly" value="0" readonly></td>
+                        <td><button class="bg-green-600 hover:bg-green-700 rounded px-2 py-1" onclick="generateLabel(this)"><img src="https://unpkg.com/lucide-static@latest/icons/play.svg" class="w-4 h-4 inline"/></button></td>
+                    </tr>
+                `;
+                document.getElementById('flowNumber').value = '';
+                document.getElementById('businessContact').value = '';
+                document.getElementById('shippingDate').value = '';
+                document.getElementById('labelPreview').style.display = 'none';
+                suffixNum = 1;
+            }
+        }
+
+        function downloadPalletRequirements() {
+            const data = palletRequirementsData.map(item => ({
+                '托盘编号': item.palletNo,
+                '胶型': item.glueType,
+                '货描': item.description,
+                '规格': item.specs,
+                '张/盒': item.sheetsPerBox,
+                '盒数': item.boxCount,
+                '总张数': item.totalSheets,
+                '托盘规格': item.palletSize,
+                '打托': item.toPallet ? '是' : '否',
+                '备注': item.remarks
+            }));
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Pallet Requirements');
+            XLSX.writeFile(wb, '打托要求.xlsx');
+        }
+
+        function printPalletRequirements() {
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write('<html><head><title>打托要求</title>');
+            printWindow.document.write('<style>table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #000; padding: 8px; text-align: center; font-size: 12px; } .flow-number { margin-bottom: 10px; } .totals { margin-top: 10px; }</style>');
+            printWindow.document.write('</head><body>');
+            printWindow.document.write(`
+                <div class="flow-number">
+                    流程单号: ${document.getElementById('flowNumber').value}   
+                    发货时间: ${document.getElementById('shippingDate').value}   
+                    商务: ${document.getElementById('businessContact').value}
+                </div>
+                <div style="height: 10px;"></div>
+            `);
+            printWindow.document.write(document.getElementById('palletTable').outerHTML);
+            printWindow.document.write(`<div class="totals">${document.getElementById('totals').innerHTML}</div>`);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            printWindow.print();
+        }
+
+        function printAllLabels() {
+            const groupedData = {};
+            palletRequirementsData.forEach(item => {
+                if (!groupedData[item.palletNo]) {
+                    groupedData[item.palletNo] = [];
+                }
+                groupedData[item.palletNo].push(item);
+            });
+
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write('<html><head><title>所有唛头</title>');
+            printWindow.document.write('<style>.label-preview { width: 297mm; height: 210mm; page-break-after: always; } .mark-container { padding: 10mm; font-size: 12pt; } .mark-header { text-align: center; } .pallet-no { font-size: 24pt; font-weight: bold; } .specs-table td { border: 1px solid #000; padding: 6px; font-size: 12pt; } .made-in-china { text-align: center; font-size: 14pt; margin-top: 10mm; }</style>');
+            printWindow.document.write('</head><body>');
+
+            Object.keys(groupedData).forEach(palletNo => {
+                const items = groupedData[palletNo];
+                let specsContent = '';
+                let totalQuantity = 0;
+                let totalBoxes = 0;
+                let maxPalletSize = [0, 0];
+                items.forEach(item => {
+                    specsContent += `
+                        <tr><td class="border border-black p-1">Products Type</td><td class="p-1">${item.glueType}</td></tr>
+                        <tr><td class="border border-black p-1">Description</td><td class="p-1">${item.description}</td></tr>
+                        <tr><td class="border border-black p-1">Size</td><td class="p-1">${item.specs}</td></tr>
+                        <tr><td class="border border-black p-1">Quantity</td><td class="p-1">${item.totalSheets} Sheets (${item.boxCount} Boxes)</td></tr>`;
+                    totalQuantity += item.totalSheets;
+                    totalBoxes += item.boxCount;
+                    const palletArea = parseInt(item.palletSize.split(' x ')[0]) * parseInt(item.palletSize.split(' x ')[1]);
+                    const maxArea = maxPalletSize[0] * maxPalletSize[1];
+                    if (palletArea > maxArea) {
+                        maxPalletSize = [parseInt(item.palletSize.split(' x ')[0]), parseInt(item.palletSize.split(' x ')[1])];
+                    }
+                });
+
+                printWindow.document.write(`
+                    <div class="label-preview">
+                        <div class="mark-container">
+                            <div class="mark-header">
+                                <div class="pallet-no">PALLET NO.: ${palletNo}</div>
+                            </div>
+                            <table class="w-full border border-black mt-2">
+                                <tr><td class="border border-black p-1">Invoice NO.[PO NO.]</td><td class="p-1">xAI Printing Co., Ltd., 123 Tech Road, Shanghai</td></tr>
+                                <tr><td class="border border-black p-1">Destination</td><td class="p-1">[Destination Port], [Destination Country]</td></tr>
+                                ${specsContent}
+                                <tr><td class="border border-black p-1">Total Quantity</td><td class="p-1">${totalQuantity} Sheets (${totalBoxes} Boxes)</td></tr>
+                                <tr><td class="border border-black p-1">Pallet Size</td><td class="p-1">${maxPalletSize[0]} x ${maxPalletSize[1]} mm</td></tr>
+                            </table>
+                            <div class="text-center mt-2 font-bold">MADE IN CHINA</div>
+                            <div class="mt-1">Remark:</div>
+                        </div>
+                    </div>
+                `);
+            });
+
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            printWindow.print();
+        }
+
+        function downloadLabelAsPDF() {
+            const element = document.getElementById('labelPreview');
+            html2pdf().from(element).set({
+                margin: 0,
+                filename: `唛头_${new Date().toISOString().slice(0,10)}.pdf`,
+                html2canvas: { scale: 2 },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+            }).save();
+        }
+
+        function printCurrentLabel() {
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write('<html><head><title>当前唛头</title>');
+            printWindow.document.write('<style>.label-preview { width: 297mm; height: 210mm; } .mark-container { padding: 10mm; font-size: 12pt; } .mark-header { text-align: center; } .pallet-no { font-size: 24pt; font-weight: bold; } .specs-table td { border: 1px solid #000; padding: 6px; font-size: 12pt; } .made-in-china { text-align: center; font-size: 14pt; margin-top: 10mm; }</style>');
+            printWindow.document.write('</head><body>');
+            printWindow.document.write(document.getElementById('labelPreview').outerHTML);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            printWindow.print();
+        }
+    </script>
+</body>
+</html>
